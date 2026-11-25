@@ -1,3 +1,4 @@
+import { assetUrl } from '../api/client'
 import type { TaskPhoto } from '../types'
 
 interface Props {
@@ -13,8 +14,8 @@ export default function PhotoGallery({ photos, onDelete }: Props) {
     <div className="gallery">
       {photos.map((p) => (
         <div key={p.id} className="thumb">
-          <a href={p.url} target="_blank" rel="noreferrer">
-            <img src={p.url} alt={`Photo uploaded by ${p.uploaded_by ?? 'employee'}`} loading="lazy" />
+          <a href={assetUrl(p.url)} target="_blank" rel="noreferrer">
+            <img src={assetUrl(p.url)} alt={`Photo uploaded by ${p.uploaded_by ?? 'employee'}`} loading="lazy" />
           </a>
           {onDelete && (
             <button

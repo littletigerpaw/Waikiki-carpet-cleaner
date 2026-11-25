@@ -1,11 +1,10 @@
-import os
-import uuid
 from datetime import date
 
 from flask import Blueprint, current_app, g, jsonify, request, send_from_directory
 
 from auth import create_token, token_required
 from models import TASK_STATUSES, Task, TaskPhoto, User, db
+from storage import delete_photo_file, save_photo
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 manager_bp = Blueprint("manager", __name__, url_prefix="/api/manager")
@@ -33,12 +32,6 @@ def validate_assignee(assigned_to_id):
     if not assignee.is_active:
         return None, "Cannot assign tasks to a deactivated employee"
     return assignee.id, None
-
-
-def delete_photo_file(photo):
-    path = os.path.join(current_app.config["UPLOAD_FOLDER"], photo.filename)
-    if os.path.exists(path):
-        os.remove(path)
 
 
 # ---------- Auth ----------
@@ -295,13 +288,12 @@ def upload_photos(task_id):
         if ext not in allowed:
             return jsonify({"error": f"'{f.filename}' is not an allowed image type"}), 400
 
-    os.makedirs(current_app.config["UPLOAD_FOLDER"], exist_ok=True)
     for f in files:
         ext = f.filename.rsplit(".", 1)[-1].lower()
-        # Random name: never trust the uploaded filename, and avoid collisions
-        filename = f"{uuid.uuid4().hex}.{ext}"
-        f.save(os.path.join(current_app.config["UPLOAD_FOLDER"], filename))
-        db.session.add(TaskPhoto(task=task, filename=filename, uploaded_by_id=g.current_user.id))
+        key, url = save_photo(f, ext)
+        db.session.add(
+            TaskPhoto(task=task, filename=key, url=url, uploaded_by_id=g.current_user.id)
+        )
 
     db.session.commit()
     return jsonify(task.to_dict()), 201

@@ -84,7 +84,10 @@ class TaskPhoto(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
+    # Local filename, or the Cloudinary public_id when stored in the cloud
     filename = db.Column(db.String(255), nullable=False, unique=True)
+    # Full public URL for cloud-stored photos (None for local files)
+    url = db.Column(db.String(500))
     uploaded_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -94,7 +97,7 @@ class TaskPhoto(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
-            "url": f"/api/uploads/{self.filename}",
+            "url": self.url or f"/api/uploads/{self.filename}",
             "uploaded_by": self.uploaded_by.first_name if self.uploaded_by else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

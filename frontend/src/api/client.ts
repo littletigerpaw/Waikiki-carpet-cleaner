@@ -2,6 +2,16 @@ import type { ManagerDashboard, Role, Task, TaskInput, TaskStatus, User } from '
 
 const TOKEN_KEY = 'token'
 
+/**
+ * Where the Flask API lives.
+ * - Dev: empty, so requests go to /api on the Vite server, which proxies to Flask.
+ * - Production: set VITE_API_URL (e.g. https://waikiki-api.onrender.com) at build time.
+ */
+export const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+
+/** Photo URLs are either absolute (Cloudinary) or relative to the API (/api/uploads/...). */
+export const assetUrl = (url: string) => (/^https?:\/\//.test(url) ? url : `${API_BASE}${url}`)
+
 export const tokenStore = {
   get: () => localStorage.getItem(TOKEN_KEY),
   set: (token: string) => localStorage.setItem(TOKEN_KEY, token),
@@ -20,7 +30,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = tokenStore.get()
   // For file uploads (FormData) the browser must set Content-Type itself
   const isForm = options.body instanceof FormData
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}/api${path}`, {
     ...options,
     headers: {
       ...(isForm ? {} : { 'Content-Type': 'application/json' }),

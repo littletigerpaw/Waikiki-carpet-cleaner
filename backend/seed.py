@@ -1,13 +1,14 @@
-"""Reset the database and load demo users + tasks.
+"""Reset the database and load demo users + tasks. FOR DEVELOPMENT ONLY.
 
-Run:  python seed.py
+Run:  flask db upgrade   (first time, creates the tables)
+      python seed.py
 """
 import os
 import shutil
 from datetime import date, timedelta
 
 from app import app
-from models import Task, User, db
+from models import Task, TaskPhoto, User, db
 
 USERS = [
     ("Kai", "Manager", "manager@waikiki.com", "manager123", "manager"),
@@ -15,13 +16,19 @@ USERS = [
     ("Noah", "Akana", "noah@waikiki.com", "employee123", "employee"),
 ]
 
+if app.config["APP_ENV"] == "production":
+    raise SystemExit("Refusing to wipe a production database. Use `flask ensure-manager` instead.")
+
 with app.app_context():
     # Clear old uploaded photos too
     shutil.rmtree(app.config["UPLOAD_FOLDER"], ignore_errors=True)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-    db.drop_all()
-    db.create_all()
+    # Empty the tables (children first). Tables themselves come from migrations.
+    TaskPhoto.query.delete()
+    Task.query.delete()
+    User.query.delete()
+    db.session.commit()
 
     users = {}
     for first, last, email, pw, role in USERS:

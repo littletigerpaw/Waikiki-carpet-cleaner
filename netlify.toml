@@ -1,0 +1,15 @@
+# Netlify: builds the React app from the frontend/ folder.
+# Set VITE_API_URL in Netlify -> Site configuration -> Environment variables.
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Single-page app: let React Router handle every path (/manager, /employee, ...)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

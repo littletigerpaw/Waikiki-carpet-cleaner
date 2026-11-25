@@ -6,3 +6,6 @@ backend/*.db
 __pycache__/
 .DS_Store
 backend/uploads/
+.pytest_cache/
+coverage/
+*.log
