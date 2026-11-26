@@ -1,4 +1,4 @@
-# Keep local-only files out of Vercel uploads
+# Keep local-only files out of Vercel uploads (e.g. `vercel deploy` from this machine)
 backend/venv
 backend/uploads
 backend/*.db

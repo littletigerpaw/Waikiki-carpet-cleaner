@@ -12,7 +12,7 @@ photos of finished units straight from their phone camera.
 | Backend  | Python, Flask, SQLAlchemy, Flask-Migrate (Alembic), JWT auth, pytest |
 | Database | SQLite (local) · PostgreSQL on Neon (production) |
 | Photos   | Local `uploads/` folder (local) · Firebase Storage (production) |
-| Hosting  | Vercel (React site + Flask API on one domain) · GitHub Actions (CI + migrations) |
+| Hosting  | Vercel services (React + Flask in one project, one domain) · GitHub Actions (CI + migrations) |
 
 ## Features
 - Separate **manager** and **employee** login portals, hashed passwords, role-protected routes
@@ -74,11 +74,15 @@ production database (once the `DATABASE_URL` secret is set, see below).
 ## Deploy (Vercel + Neon + Firebase Storage)
 
 ```
-Browser ──► Vercel ──► React site (frontend/dist)
-              └──────► /api/*  → Flask (api/index.py → backend/)
-                                   ├─► Neon PostgreSQL   (users, tasks)
-                                   └─► Firebase Storage  (photos)
+Browser ──► Vercel project (one domain, two services from vercel.json)
+              ├── /api/*  → "backend" service  (Flask, backend/app.py)
+              │                ├─► Neon PostgreSQL   (users, tasks)
+              │                └─► Firebase Storage  (photos)
+              └── /*      → "frontend" service (Vite build of frontend/,
+                                                unknown paths → index.html)
 ```
+Flask receives the full path (e.g. `/api/auth/login`), which is why every route starts with `/api`.
+The browser calls `/api/...` on the same domain, so there's no CORS and no API URL to configure.
 
 ### 1. Firebase Storage (photos)
 1. [console.firebase.google.com](https://console.firebase.google.com) → **Add project**.
@@ -91,7 +95,7 @@ Browser ──► Vercel ──► React site (frontend/dist)
 
 ### 2. Vercel project (site + API)
 1. [vercel.com](https://vercel.com) → **Add New → Project** → import this GitHub repo.
-   Leave **Root Directory** as the repo root (`vercel.json` configures everything).
+   Leave **Root Directory** as the repo root: `vercel.json` defines the two services.
 2. **Storage → Create Database → Neon (Postgres)** and connect it to the project.
    This adds `DATABASE_URL` automatically.
 3. **Settings → Environment Variables** (Production), add:
