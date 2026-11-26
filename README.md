@@ -10,9 +10,9 @@ photos of finished units straight from their phone camera.
 |----------|------|
 | Frontend | React, Vite, TypeScript, React Router, Vitest + Testing Library |
 | Backend  | Python, Flask, SQLAlchemy, Flask-Migrate (Alembic), JWT auth, pytest |
-| Database | SQLite (local) · PostgreSQL (production) |
-| Photos   | Local `uploads/` folder (local) · Cloudinary (production) |
-| Hosting  | Render (API + Postgres) · Netlify (frontend) · GitHub Actions (CI) |
+| Database | SQLite (local) · PostgreSQL on Neon (production) |
+| Photos   | Local `uploads/` folder (local) · Firebase Storage (production) |
+| Hosting  | Vercel (React site + Flask API on one domain) · GitHub Actions (CI + migrations) |
 
 ## Features
 - Separate **manager** and **employee** login portals, hashed passwords, role-protected routes
@@ -55,10 +55,11 @@ Put the phone on the same Wi-Fi as your computer and open the **Network** URL th
 
 ## Tests
 ```bash
-cd backend && pytest          # 54 API tests (auth, permissions, tasks, photos, config)
-cd frontend && npm test       # login page, route guards, API client
+cd backend && pytest          # API tests: auth, permissions, tasks, photos, Firebase storage, config
+cd frontend && npm test       # login page, route guards, API client, photo compression
 ```
 GitHub Actions runs both suites, lint, a type-checked build, and a migration check on every push.
+On pushes to `main` it then applies migrations to the production database.
 
 ## Database changes (migrations)
 After editing `backend/models.py`:
@@ -67,36 +68,66 @@ cd backend
 flask db migrate -m "describe the change"   # generates a file in migrations/versions/
 flask db upgrade                            # applies it
 ```
-Commit the new migration file. Production applies it automatically on the next deploy.
+Commit the new migration file. When you push to `main`, GitHub Actions applies it to the
+production database (once the `DATABASE_URL` secret is set, see below).
 
-## Deploy
+## Deploy (Vercel + Neon + Firebase Storage)
 
-### 1. Cloudinary (photo storage, free)
-Sign up at cloudinary.com and copy the **API environment variable**
-(`cloudinary://<key>:<secret>@<cloud-name>`) from the dashboard.
+```
+Browser ──► Vercel ──► React site (frontend/dist)
+              └──────► /api/*  → Flask (api/index.py → backend/)
+                                   ├─► Neon PostgreSQL   (users, tasks)
+                                   └─► Firebase Storage  (photos)
+```
 
-### 2. Backend + database on Render
-1. Render dashboard → **New → Blueprint** → choose this repo (it reads `render.yaml`).
-2. Fill in the prompted values:
-   - `CLOUDINARY_URL` — from step 1
-   - `INITIAL_MANAGER_EMAIL` / `INITIAL_MANAGER_PASSWORD` — your first manager login
-   - `FRONTEND_ORIGIN` — put a placeholder for now; update it after step 3
-3. When it's live, note the API URL (e.g. `https://waikiki-api.onrender.com`) and check
-   `https://…onrender.com/api/health` returns `{"status": "ok"}`.
+### 1. Firebase Storage (photos)
+1. [console.firebase.google.com](https://console.firebase.google.com) → **Add project**.
+2. **Build → Storage → Get started** (production mode is fine; the server uses an admin key).
+   Copy the bucket name shown at the top, e.g. `your-project.firebasestorage.app`.
+   *Newer Firebase projects need the pay-as-you-go **Blaze** plan to use Storage. It has a
+   free allowance (about 5 GB), so a small company normally pays $0; set a budget alert anyway.*
+3. **Project settings (⚙) → Service accounts → Generate new private key**. A JSON file downloads.
+   Treat it like a password: never commit it or share it.
 
-### 3. Frontend on Netlify
-1. Netlify → **Add new site → Import from Git** → choose this repo (it reads `netlify.toml`).
-2. Site configuration → Environment variables → add `VITE_API_URL` = your Render API URL.
-3. Deploy, then copy the site URL (e.g. `https://waikiki-cleaners.netlify.app`).
+### 2. Vercel project (site + API)
+1. [vercel.com](https://vercel.com) → **Add New → Project** → import this GitHub repo.
+   Leave **Root Directory** as the repo root (`vercel.json` configures everything).
+2. **Storage → Create Database → Neon (Postgres)** and connect it to the project.
+   This adds `DATABASE_URL` automatically.
+3. **Settings → Environment Variables** (Production), add:
+   | Name | Value |
+   |------|-------|
+   | `SECRET_KEY` | output of `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+   | `FIREBASE_STORAGE_BUCKET` | bucket name from step 1.2 |
+   | `FIREBASE_SERVICE_ACCOUNT` | paste the **entire contents** of the JSON file from step 1.3 |
+4. **Deployments → Redeploy** so the new variables take effect.
 
-### 4. Connect them
-In Render, set `FRONTEND_ORIGIN` to the Netlify URL (no trailing slash) and save
-(Render redeploys). Log in as the manager, change the password on **My Account**, then
-delete `INITIAL_MANAGER_PASSWORD` from Render.
+### 3. Create the tables and your manager login (one time, from your computer)
+Copy the Neon connection string (Vercel → Storage → your database → `DATABASE_URL`), then:
+```bash
+cd backend && source venv/bin/activate
+export DATABASE_URL="postgresql://...your Neon URL..."
+flask db upgrade          # creates the tables in Neon
+flask create-manager      # prompts for name, email, password
+unset DATABASE_URL        # back to your local SQLite database
+```
 
-> Free-tier notes: Render's free web service sleeps after ~15 min idle (first request takes
-> ~30–60 s), and Render's free Postgres database expires after 30 days. Upgrade either when
-> the company starts relying on it.
+### 4. Automatic migrations (optional, recommended)
+GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**:
+`DATABASE_URL` = the same Neon connection string. From then on, every push to `main` that
+passes the tests also runs `flask db upgrade` on production.
+
+### 5. Check it
+- `https://<your-app>.vercel.app/api/health` → `{"status": "ok"}`
+- Log in as your manager, add an employee, log in as them on a phone, take a photo.
+
+> **Notes**
+> - Photos are shrunk in the browser (max 2000px JPEG) before upload, because Vercel limits
+>   each request to 4.5 MB. Multiple photos upload one at a time.
+> - Photo links contain a random token: anyone with the exact link can view the photo,
+>   but links can't be guessed.
+> - Vercel and Neon free tiers suit a small team. Neon's free database pauses when idle,
+>   so the first request after a quiet period can take a second or two.
 
 ## API
 | Method | Route                                   | Who |
@@ -114,11 +145,11 @@ delete `INITIAL_MANAGER_PASSWORD` from Render.
 | PATCH  | /api/employee/tasks/:id                 | employee (status) |
 | POST   | /api/employee/tasks/:id/photos          | employee (multipart, field `photos`) |
 | DELETE | /api/employee/tasks/:id/photos/:photoId | employee |
-| GET    | /api/uploads/:filename                  | local dev photo storage |
+| GET    | /api/uploads/:filename                  | local dev photo storage only |
 | GET    | /api/health                             | health check |
 
 ## Useful commands
 ```bash
-flask create-manager      # add another manager interactively
-flask ensure-manager      # create first manager from INITIAL_MANAGER_* env vars
+flask create-manager      # add a manager (set DATABASE_URL to target production)
+flask db upgrade          # apply migrations (same)
 ```

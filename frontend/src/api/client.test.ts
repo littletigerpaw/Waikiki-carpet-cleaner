@@ -32,6 +32,17 @@ describe('api client', () => {
     expect(init.headers['Content-Type']).toBeUndefined()
   })
 
+  it('uploads several photos one request at a time and returns the final task', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(201, { id: 5, photos: [1] }))
+      .mockResolvedValueOnce(jsonResponse(201, { id: 5, photos: [1, 2] }))
+    const files = [new File(['a'], 'a.png', { type: 'image/png' }), new File(['b'], 'b.png', { type: 'image/png' })]
+    const task = await api.uploadPhotos(5, files)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect((fetchMock.mock.calls[1][1].body as FormData).get('photos')).toBeInstanceOf(File)
+    expect(task.photos).toHaveLength(2)
+  })
+
   it('throws ApiError with the server message', async () => {
     fetchMock.mockResolvedValue(jsonResponse(400, { error: 'Missing fields: address' }))
     await expect(api.createTask({} as never)).rejects.toEqual(new ApiError('Missing fields: address', 400))
@@ -50,13 +61,14 @@ describe('api client', () => {
 
   it('gives a friendly message for uploads that are too large', async () => {
     fetchMock.mockResolvedValue(new Response('Too large', { status: 413 }))
-    await expect(api.uploadPhotos(1, [])).rejects.toThrow(/10 MB/)
+    await expect(api.uploadPhotos(1, [new File(['x'], 'big.png', { type: 'image/png' })])).rejects.toThrow(/4 MB/)
   })
 })
 
 describe('assetUrl', () => {
-  it('keeps absolute URLs (Cloudinary) unchanged', () => {
-    expect(assetUrl('https://res.cloudinary.com/x/photo.jpg')).toBe('https://res.cloudinary.com/x/photo.jpg')
+  it('keeps absolute URLs (Firebase Storage) unchanged', () => {
+    const url = 'https://firebasestorage.googleapis.com/v0/b/app/o/task-photos%2Fa.jpg?alt=media&token=t'
+    expect(assetUrl(url)).toBe(url)
   })
   it('leaves relative API paths relative in dev', () => {
     expect(assetUrl('/api/uploads/abc.png')).toBe('/api/uploads/abc.png')

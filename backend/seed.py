@@ -17,7 +17,7 @@ USERS = [
 ]
 
 if app.config["APP_ENV"] == "production":
-    raise SystemExit("Refusing to wipe a production database. Use `flask ensure-manager` instead.")
+    raise SystemExit("Refusing to wipe a production database. Use `flask create-manager` instead.")
 
 with app.app_context():
     # Clear old uploaded photos too

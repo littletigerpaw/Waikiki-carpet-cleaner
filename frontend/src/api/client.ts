@@ -1,15 +1,16 @@
+import { compressImage } from '../image'
 import type { ManagerDashboard, Role, Task, TaskInput, TaskStatus, User } from '../types'
 
 const TOKEN_KEY = 'token'
 
 /**
- * Where the Flask API lives.
- * - Dev: empty, so requests go to /api on the Vite server, which proxies to Flask.
- * - Production: set VITE_API_URL (e.g. https://waikiki-api.onrender.com) at build time.
+ * Where the Flask API lives. Normally empty: requests go to /api on the same site
+ * (Vite proxies it to Flask in dev; Vercel routes it to the Python function in
+ * production). Set VITE_API_URL only if the API is hosted on a different domain.
  */
 export const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
-/** Photo URLs are either absolute (Cloudinary) or relative to the API (/api/uploads/...). */
+/** Photo URLs are either absolute (Firebase Storage) or relative to the API (/api/uploads/...). */
 export const assetUrl = (url: string) => (/^https?:\/\//.test(url) ? url : `${API_BASE}${url}`)
 
 export const tokenStore = {
@@ -45,7 +46,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       tokenStore.clear()
       window.location.assign('/login')
     }
-    if (res.status === 413) throw new ApiError('Upload too large (10 MB max)', 413)
+    if (res.status === 413) throw new ApiError('Photo too large to upload (4 MB max)', 413)
     throw new ApiError(data.error ?? 'Something went wrong', res.status)
   }
   return data as T
@@ -81,10 +82,16 @@ export const api = {
   myTasks: () => request<Task[]>('/employee/tasks'),
   updateTaskStatus: (id: number, status: TaskStatus) =>
     request<Task>(`/employee/tasks/${id}`, json('PATCH', { status })),
-  uploadPhotos: (taskId: number, files: FileList | File[]) => {
-    const form = new FormData()
-    Array.from(files).forEach((f) => form.append('photos', f))
-    return request<Task>(`/employee/tasks/${taskId}/photos`, { method: 'POST', body: form })
+  /** Shrinks each photo, then uploads them one per request (keeps each under Vercel's limit). */
+  uploadPhotos: async (taskId: number, files: FileList | File[]) => {
+    let task: Task | null = null
+    for (const original of Array.from(files)) {
+      const form = new FormData()
+      form.append('photos', await compressImage(original))
+      task = await request<Task>(`/employee/tasks/${taskId}/photos`, { method: 'POST', body: form })
+    }
+    if (!task) throw new ApiError('No photos selected', 400)
+    return task
   },
   deletePhoto: (taskId: number, photoId: number) =>
     request<Task>(`/employee/tasks/${taskId}/photos/${photoId}`, { method: 'DELETE' }),

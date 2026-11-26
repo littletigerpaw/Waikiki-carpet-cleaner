@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  /** Base URL of the Flask API in production, e.g. https://waikiki-api.onrender.com */
+  /** Only if the Flask API is on a different domain than the site (not needed on Vercel) */
   readonly VITE_API_URL?: string
 }
 

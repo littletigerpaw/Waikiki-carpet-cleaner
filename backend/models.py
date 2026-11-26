@@ -84,9 +84,9 @@ class TaskPhoto(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
-    # Local filename, or the Cloudinary public_id when stored in the cloud
+    # Local filename, or the Firebase Storage path when stored in the cloud
     filename = db.Column(db.String(255), nullable=False, unique=True)
-    # Full public URL for cloud-stored photos (None for local files)
+    # Firebase download URL for cloud-stored photos (None for local files)
     url = db.Column(db.String(500))
     uploaded_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

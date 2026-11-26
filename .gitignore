@@ -9,3 +9,8 @@ backend/uploads/
 .pytest_cache/
 coverage/
 *.log
+
+# Firebase service-account keys: never commit these
+*firebase-adminsdk*.json
+*service-account*.json
+.vercel/

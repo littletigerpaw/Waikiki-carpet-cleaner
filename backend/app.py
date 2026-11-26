@@ -1,5 +1,3 @@
-import os
-
 import click
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -19,10 +17,10 @@ def create_app(config_class=Config):
     if app.config["APP_ENV"] == "production":
         if app.config["SECRET_KEY"] == DEV_SECRET:
             raise RuntimeError("Set the SECRET_KEY environment variable in production")
-        if not app.config["CLOUDINARY_URL"]:
+        if not app.config["FIREBASE_STORAGE_BUCKET"]:
             app.logger.warning(
-                "CLOUDINARY_URL is not set: photos will be saved to local disk "
-                "and lost when the server restarts."
+                "FIREBASE_STORAGE_BUCKET is not set: photo uploads will not work "
+                "on hosts without a permanent disk (like Vercel)."
             )
 
     db.init_app(app)
@@ -50,7 +48,11 @@ def register_cli(app):
     @click.option("--email", prompt=True)
     @click.password_option()
     def create_manager(first_name, last_name, email, password):
-        """Create a manager account (interactive)."""
+        """Create a manager account (interactive).
+
+        To create one in production, point DATABASE_URL at the Neon database:
+            DATABASE_URL="postgresql://..." flask create-manager
+        """
         email = email.strip().lower()
         if User.query.filter_by(email=email).first():
             raise click.ClickException(f"{email} already exists")
@@ -59,28 +61,6 @@ def register_cli(app):
         db.session.add(user)
         db.session.commit()
         click.echo(f"Manager {email} created.")
-
-    @app.cli.command("ensure-manager")
-    def ensure_manager():
-        """Create the first manager from env vars if no manager exists yet.
-
-        Used on hosts without shell access (e.g. Render free plan). Set
-        INITIAL_MANAGER_EMAIL and INITIAL_MANAGER_PASSWORD, deploy once, log in,
-        change the password on the My Account page, then remove the env vars.
-        """
-        email = (os.getenv("INITIAL_MANAGER_EMAIL") or "").strip().lower()
-        password = os.getenv("INITIAL_MANAGER_PASSWORD")
-        if User.query.filter_by(role="manager").first():
-            click.echo("A manager already exists; nothing to do.")
-            return
-        if not email or not password:
-            click.echo("No manager yet. Set INITIAL_MANAGER_EMAIL and INITIAL_MANAGER_PASSWORD to create one.")
-            return
-        user = User(first_name="Admin", last_name="Manager", email=email, role="manager")
-        user.set_password(password)
-        db.session.add(user)
-        db.session.commit()
-        click.echo(f"Created initial manager {email}.")
 
 
 app = create_app()

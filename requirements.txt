@@ -1,0 +1,2 @@
+# Vercel installs this for the Python function in api/. The real list lives in backend/.
+-r backend/requirements.txt

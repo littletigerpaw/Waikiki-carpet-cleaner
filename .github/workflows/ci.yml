@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements*.txt
       - run: pip install -r requirements-dev.txt
@@ -43,3 +43,32 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  migrate:
+    name: Migrate production database
+    # Only after both test jobs pass, and only for pushes to main
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # Add in GitHub: Settings -> Secrets and variables -> Actions -> DATABASE_URL
+      # (use the same Neon connection string Vercel has)
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: pip install -r requirements.txt
+      - name: flask db upgrade
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::notice::DATABASE_URL secret not set yet; skipping production migration."
+            exit 0
+          fi
+          flask db upgrade

@@ -1,0 +1,8 @@
+# Keep local-only files out of Vercel uploads
+backend/venv
+backend/uploads
+backend/*.db
+backend/.env
+backend/tests
+frontend/node_modules
+frontend/dist
