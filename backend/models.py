@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import true
+from sqlalchemy import false, true
 from werkzeug.security import check_password_hash, generate_password_hash
 
 db = SQLAlchemy()
@@ -54,6 +54,8 @@ class Task(db.Model):
     scheduled_date = db.Column(db.Date, nullable=False)
     status = db.Column(db.String(20), nullable=False, default="pending")
     assigned_to_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    # True when the employee who did this task was permanently deleted
+    assignee_deleted = db.Column(db.Boolean, nullable=False, default=False, server_default=false())
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     assignee = db.relationship("User", back_populates="tasks")
@@ -73,6 +75,7 @@ class Task(db.Model):
             "scheduled_date": self.scheduled_date.isoformat(),
             "status": self.status,
             "assigned_to": self.assignee.to_dict() if self.assignee else None,
+            "assignee_deleted": self.assignee_deleted,
             "photos": [p.to_dict() for p in self.photos],
         }
 

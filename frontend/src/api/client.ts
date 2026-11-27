@@ -1,5 +1,5 @@
 import { compressImage } from '../image'
-import type { ManagerDashboard, Role, Task, TaskInput, TaskStatus, User } from '../types'
+import type { CleanupSummary, ManagerDashboard, Role, Task, TaskInput, TaskStatus, User } from '../types'
 
 const TOKEN_KEY = 'token'
 
@@ -75,6 +75,12 @@ export const api = {
     phone: string
     password: string
   }) => request<User>('/manager/employees', json('POST', emp)),
+  deleteEmployee: (id: number) =>
+    request<{ message: string; tasks_updated: number }>(`/manager/employees/${id}`, { method: 'DELETE' }),
+  managerDeletePhoto: (taskId: number, photoId: number) =>
+    request<Task>(`/manager/tasks/${taskId}/photos/${photoId}`, { method: 'DELETE' }),
+  cleanupPreview: (days: number) => request<CleanupSummary>(`/manager/cleanup?days=${days}`),
+  cleanupOldTasks: (days: number) => request<CleanupSummary>('/manager/cleanup', json('POST', { days })),
   setEmployeeActive: (id: number, is_active: boolean) =>
     request<{ employee: User; unassigned_tasks: number }>(`/manager/employees/${id}`, json('PATCH', { is_active })),
 

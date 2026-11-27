@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api } from '../api/client'
 import { STATUS_LABELS } from '../types'
-import type { Task, TaskStatus, User } from '../types'
+import type { Task, TaskPhoto, TaskStatus, User } from '../types'
 import PhotoGallery from './PhotoGallery'
 
 interface Props {
@@ -10,10 +10,12 @@ interface Props {
   employees: User[]
   onClose: () => void
   onSaved: () => void
+  /** Called after a photo is deleted, so the dashboard can refresh in the background */
+  onPhotosChanged?: () => void
 }
 
 /** Manager popup to edit, reassign, or delete a task and view its photos. */
-export default function EditTaskModal({ task, employees, onClose, onSaved }: Props) {
+export default function EditTaskModal({ task, employees, onClose, onSaved, onPhotosChanged }: Props) {
   const [form, setForm] = useState({
     unit_name: task.unit_name,
     address: task.address,
@@ -24,6 +26,19 @@ export default function EditTaskModal({ task, employees, onClose, onSaved }: Pro
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [photos, setPhotos] = useState(task.photos)
+
+  const handleDeletePhoto = async (photo: TaskPhoto) => {
+    if (!window.confirm('Permanently delete this photo? This cannot be undone.')) return
+    setError('')
+    try {
+      const updated = await api.managerDeletePhoto(task.id, photo.id)
+      setPhotos(updated.photos)
+      onPhotosChanged?.()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete photo')
+    }
+  }
 
   // Close on Escape key
   useEffect(() => {
@@ -117,8 +132,8 @@ export default function EditTaskModal({ task, employees, onClose, onSaved }: Pro
           </label>
 
           <div>
-            <strong className="small">Photos ({task.photos.length})</strong>
-            <PhotoGallery photos={task.photos} />
+            <strong className="small">Photos ({photos.length})</strong>
+            <PhotoGallery photos={photos} onDelete={handleDeletePhoto} />
           </div>
 
           {error && <p className="error">{error}</p>}

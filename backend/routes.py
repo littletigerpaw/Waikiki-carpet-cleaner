@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from flask import Blueprint, current_app, g, jsonify, request, send_from_directory
 
@@ -12,6 +12,8 @@ employee_bp = Blueprint("employee", __name__, url_prefix="/api/employee")
 uploads_bp = Blueprint("uploads", __name__, url_prefix="/api/uploads")
 
 MIN_PASSWORD_LENGTH = 8
+CLEANUP_MIN_DAYS = 1
+CLEANUP_MAX_DAYS = 3650
 
 
 # ---------- Helpers ----------
@@ -217,6 +219,8 @@ def update_task(task_id):
         if err:
             return jsonify({"error": err}), 400
         task.assigned_to_id = assigned_to_id
+        if assigned_to_id is not None:
+            task.assignee_deleted = False
 
     db.session.commit()
     return jsonify(task.to_dict())
@@ -234,6 +238,94 @@ def delete_task(task_id):
     db.session.delete(task)
     db.session.commit()
     return jsonify({"message": "Task deleted"})
+
+
+@manager_bp.delete("/tasks/<int:task_id>/photos/<int:photo_id>")
+@token_required("manager")
+def manager_delete_photo(task_id, photo_id):
+    """Managers can remove any photo (e.g. blurry or wrong unit)."""
+    photo = db.session.get(TaskPhoto, photo_id)
+    if photo is None or photo.task_id != task_id:
+        return jsonify({"error": "Photo not found"}), 404
+
+    task = photo.task
+    delete_photo_file(photo)
+    db.session.delete(photo)
+    db.session.commit()
+    return jsonify(task.to_dict())
+
+
+@manager_bp.delete("/employees/<int:employee_id>")
+@token_required("manager")
+def delete_employee(employee_id):
+    """Permanently delete an employee. They must be deactivated first.
+
+    Unfinished tasks become unassigned; completed tasks stay but are marked
+    "Former employee". Their photos stay with the tasks.
+    """
+    employee = db.session.get(User, employee_id)
+    if employee is None or employee.role != "employee":
+        return jsonify({"error": "Employee not found"}), 404
+    if employee.is_active:
+        return jsonify({"error": "Deactivate this employee before deleting them"}), 409
+
+    tasks = Task.query.filter_by(assigned_to_id=employee.id).all()
+    for task in tasks:
+        task.assignee_deleted = task.status == "completed"
+        task.assigned_to_id = None
+    TaskPhoto.query.filter_by(uploaded_by_id=employee.id).update({"uploaded_by_id": None})
+
+    name = f"{employee.first_name} {employee.last_name}"
+    db.session.delete(employee)
+    db.session.commit()
+    return jsonify({"message": f"{name} was permanently deleted", "tasks_updated": len(tasks)})
+
+
+def _cleanup_query(days):
+    cutoff = date.today() - timedelta(days=days)
+    return Task.query.filter(Task.status == "completed", Task.scheduled_date < cutoff), cutoff
+
+
+def _parse_cleanup_days(value):
+    try:
+        days = int(value)
+    except (TypeError, ValueError):
+        return None
+    return days if CLEANUP_MIN_DAYS <= days <= CLEANUP_MAX_DAYS else None
+
+
+@manager_bp.get("/cleanup")
+@token_required("manager")
+def cleanup_preview():
+    """How much would be deleted? Nothing is changed."""
+    days = _parse_cleanup_days(request.args.get("days"))
+    if days is None:
+        return jsonify({"error": f"days must be {CLEANUP_MIN_DAYS}-{CLEANUP_MAX_DAYS}"}), 400
+
+    query, cutoff = _cleanup_query(days)
+    task_ids = [t.id for t in query.with_entities(Task.id)]
+    photos = TaskPhoto.query.filter(TaskPhoto.task_id.in_(task_ids)).count() if task_ids else 0
+    return jsonify({"days": days, "cutoff": cutoff.isoformat(), "tasks": len(task_ids), "photos": photos})
+
+
+@manager_bp.post("/cleanup")
+@token_required("manager")
+def cleanup_old_tasks():
+    """Permanently delete completed tasks (and their photos) older than `days`."""
+    days = _parse_cleanup_days((request.get_json() or {}).get("days"))
+    if days is None:
+        return jsonify({"error": f"days must be {CLEANUP_MIN_DAYS}-{CLEANUP_MAX_DAYS}"}), 400
+
+    query, cutoff = _cleanup_query(days)
+    tasks = query.all()
+    photo_count = 0
+    for task in tasks:
+        for photo in task.photos:
+            delete_photo_file(photo)
+            photo_count += 1
+        db.session.delete(task)
+    db.session.commit()
+    return jsonify({"days": days, "cutoff": cutoff.isoformat(), "tasks": len(tasks), "photos": photo_count})
 
 
 # ---------- Employee ----------

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api } from '../api/client'
+import CleanupCard from '../components/CleanupCard'
 import EditTaskModal from '../components/EditTaskModal'
 import Navbar from '../components/Navbar'
 import StatusBadge from '../components/StatusBadge'
@@ -23,8 +24,16 @@ export default function ManagerHome() {
   const [editing, setEditing] = useState<Task | null>(null)
   const [filters, setFilters] = useState(emptyFilters)
 
+  const [refreshKey, setRefreshKey] = useState(0)
+
   const load = useCallback(() => {
-    api.managerDashboard().then(setData).catch((e: Error) => setError(e.message))
+    api
+      .managerDashboard()
+      .then((d) => {
+        setData(d)
+        setRefreshKey((k) => k + 1) // re-check the clean-up preview whenever tasks reload
+      })
+      .catch((e: Error) => setError(e.message))
   }, [])
 
   useEffect(load, [load])
@@ -38,7 +47,7 @@ export default function ManagerHome() {
     return data.tasks.filter((t) => {
       if (q && !`${t.unit_name} ${t.address} ${t.description ?? ''}`.toLowerCase().includes(q)) return false
       if (filters.status && t.status !== filters.status) return false
-      if (filters.employee === 'unassigned' && t.assigned_to) return false
+      if (filters.employee === 'unassigned' && (t.assigned_to || t.assignee_deleted)) return false
       if (filters.employee && filters.employee !== 'unassigned' && String(t.assigned_to?.id) !== filters.employee)
         return false
       // ISO dates (YYYY-MM-DD) compare correctly as strings
@@ -104,6 +113,25 @@ export default function ManagerHome() {
       load()
     } catch (err) {
       setFormMsg(err instanceof Error ? err.message : 'Could not update employee')
+    }
+  }
+
+  const deleteEmployee = async (emp: User) => {
+    const name = `${emp.first_name} ${emp.last_name}`
+    if (
+      !window.confirm(
+        `Permanently delete ${name}?\n\nTheir account is erased and cannot be recovered. ` +
+          `Completed cleanings they did stay in the list as "Former employee".`,
+      )
+    )
+      return
+    setFormMsg('')
+    try {
+      const res = await api.deleteEmployee(emp.id)
+      setFormMsg(res.message + '.')
+      load()
+    } catch (err) {
+      setFormMsg(err instanceof Error ? err.message : 'Could not delete employee')
     }
   }
 
@@ -217,6 +245,8 @@ export default function ManagerHome() {
                               {t.assigned_to.first_name} {t.assigned_to.last_name}
                               {!t.assigned_to.is_active && <div className="muted small">deactivated</div>}
                             </>
+                          ) : t.assignee_deleted ? (
+                            <span className="muted">Former employee</span>
                           ) : (
                             <span className="muted">Unassigned</span>
                           )}
@@ -306,19 +336,35 @@ export default function ManagerHome() {
                         </strong>
                         <span className="muted small">{emp.email}</span>
                       </div>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${emp.is_active ? 'btn-danger' : 'btn-outline'}`}
-                        onClick={() => toggleEmployee(emp)}
-                      >
-                        {emp.is_active ? 'Deactivate' : 'Reactivate'}
-                      </button>
+                      <div className="team-actions">
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${emp.is_active ? 'btn-danger' : 'btn-outline'}`}
+                          onClick={() => toggleEmployee(emp)}
+                        >
+                          {emp.is_active ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                        {/* Deleting is only offered after deactivating, so it can't happen by accident */}
+                        {!emp.is_active && (
+                          <button type="button" className="btn btn-sm btn-danger" onClick={() => deleteEmployee(emp)}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </li>
                   ))}
                   {data.employees.length === 0 && <li className="muted">No employees yet.</li>}
                 </ul>
               </section>
             </div>
+
+            <CleanupCard
+              refreshKey={refreshKey}
+              onDeleted={(message) => {
+                setFormMsg(message)
+                load()
+              }}
+            />
           </>
         )}
 
@@ -332,6 +378,7 @@ export default function ManagerHome() {
               setFormMsg('Task updated.')
               load()
             }}
+            onPhotosChanged={load}
           />
         )}
       </main>

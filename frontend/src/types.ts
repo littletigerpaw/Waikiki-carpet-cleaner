@@ -27,6 +27,8 @@ export interface Task {
   scheduled_date: string
   status: TaskStatus
   assigned_to: User | null
+  /** True when the employee who did this task was permanently deleted */
+  assignee_deleted: boolean
   photos: TaskPhoto[]
 }
 
@@ -37,6 +39,13 @@ export interface TaskInput {
   scheduled_date: string
   assigned_to_id: number | null
   status?: TaskStatus
+}
+
+export interface CleanupSummary {
+  days: number
+  cutoff: string
+  tasks: number
+  photos: number
 }
 
 export interface ManagerDashboard {

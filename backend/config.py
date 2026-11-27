@@ -48,7 +48,8 @@ class TestConfig(Config):
     TESTING = True
     APP_ENV = "test"
     SECRET_KEY = "test-secret-key-that-is-long-enough-for-hs256"
-    SQLALCHEMY_DATABASE_URI = "sqlite://"  # in-memory
+    # In-memory SQLite by default; CI sets TEST_DATABASE_URL to run on real PostgreSQL
+    SQLALCHEMY_DATABASE_URI = os.getenv("TEST_DATABASE_URL", "sqlite://")
     SQLALCHEMY_ENGINE_OPTIONS = {}
     FIREBASE_STORAGE_BUCKET = None
     FIREBASE_SERVICE_ACCOUNT = None
