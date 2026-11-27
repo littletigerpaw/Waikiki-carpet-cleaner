@@ -18,6 +18,8 @@ photos of finished units straight from their phone camera.
 - Separate **manager** and **employee** login portals, hashed passwords, role-protected routes
 - **Managers:** dashboard stats, schedule / edit / reassign / delete cleanings, filter tasks
   (search, status, employee, date range), add employees, deactivate / reactivate employees
+- **Data clean-up (managers):** bulk-delete completed cleanings older than 30 days–1 year (with a
+  preview), permanently delete deactivated employees, delete any photo
 - **Employees:** today's and upcoming cleanings, update status, take or upload photos
 - **Everyone:** My Account page with password change
 
@@ -58,7 +60,8 @@ Put the phone on the same Wi-Fi as your computer and open the **Network** URL th
 cd backend && pytest          # API tests: auth, permissions, tasks, photos, Firebase storage, config
 cd frontend && npm test       # login page, route guards, API client, photo compression
 ```
-GitHub Actions runs both suites, lint, a type-checked build, and a migration check on every push.
+GitHub Actions runs both suites (backend on SQLite **and** real PostgreSQL), lint, a type-checked
+build, and a migration up/down check on every push.
 On pushes to `main` it then applies migrations to the production database.
 
 ## Database changes (migrations)
@@ -142,6 +145,10 @@ passes the tests also runs `flask db upgrade` on production.
 | GET    | /api/manager/dashboard                  | manager |
 | POST   | /api/manager/employees                  | manager |
 | PATCH  | /api/manager/employees/:id              | manager (`{"is_active": false}` deactivates) |
+| DELETE | /api/manager/employees/:id              | manager (deactivated employees only) |
+| GET    | /api/manager/cleanup?days=N             | manager (preview: counts only) |
+| POST   | /api/manager/cleanup                    | manager (`{"days": N}` deletes old completed tasks) |
+| DELETE | /api/manager/tasks/:id/photos/:photoId  | manager |
 | POST   | /api/manager/tasks                      | manager |
 | PATCH  | /api/manager/tasks/:id                  | manager (edit / reassign) |
 | DELETE | /api/manager/tasks/:id                  | manager |
