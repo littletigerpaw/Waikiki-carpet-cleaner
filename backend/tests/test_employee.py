@@ -1,5 +1,6 @@
 import io
 import os
+import re
 
 import pytest
 
@@ -52,9 +53,9 @@ def test_upload_multiple_photos(app, client, employee, employee_headers):
     assert len(res.json["photos"]) == 2
     assert len(os.listdir(app.config["UPLOAD_FOLDER"])) == 2
 
-    # served back with a random name, not the original
+    # served back under a random 32-character name, never the original filename
     url = res.json["photos"][0]["url"]
-    assert url.startswith("/api/uploads/") and "a.png" not in url
+    assert re.fullmatch(r"/api/uploads/[0-9a-f]{32}\.png", url), url
     assert client.get(url).status_code == 200
 
 
