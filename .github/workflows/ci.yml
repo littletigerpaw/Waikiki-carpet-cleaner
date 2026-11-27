@@ -74,6 +74,10 @@ jobs:
     needs: [backend, frontend]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Never run two production migrations/deploys at once; queue them in push order
+    concurrency:
+      group: production
+      cancel-in-progress: false
     defaults:
       run:
         working-directory: backend
@@ -96,3 +100,54 @@ jobs:
             exit 0
           fi
           flask db upgrade
+
+  deploy:
+    name: Deploy to Vercel (production)
+    # Only after tests pass AND the database is migrated, so new code never
+    # runs against an old database schema
+    needs: [migrate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    env:
+      # Add in GitHub: Settings -> Secrets and variables -> Actions
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Check Vercel secrets
+        id: secrets
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::notice::Vercel secrets not set yet; skipping deploy (Vercel's own Git deploys still run)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v5
+        if: steps.secrets.outputs.ready == 'true'
+      - uses: actions/setup-node@v5
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          node-version: 24
+      - name: Install Vercel CLI
+        if: steps.secrets.outputs.ready == 'true'
+        run: npm install --global vercel@68.0.0
+      - name: Deploy
+        if: steps.secrets.outputs.ready == 'true'
+        # Uploads this commit; Vercel builds both services with the project's
+        # environment variables, then promotes it to the production domain
+        run: |
+          url=$(vercel deploy --prod --yes --token="$VERCEL_TOKEN")
+          echo "Deployed: $url"
+          echo "::notice::Deployed to production: $url"
+      - name: Smoke test the live site
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 30 https://waikiki-carpet-cleaner.vercel.app/api/health; then exit 0; fi
+            echo "health check failed, retrying in 10s..."; sleep 10
+          done
+          echo "::error::Production health check failed after deploy"; exit 1
