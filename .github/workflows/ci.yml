@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # "Run workflow" button on GitHub's Actions tab: re-test and redeploy main by hand
+  workflow_dispatch:
 
 jobs:
   backend:
@@ -72,7 +74,7 @@ jobs:
     name: Migrate production database
     # Only after both test jobs pass, and only for pushes to main
     needs: [backend, frontend]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     # Never run two production migrations/deploys at once; queue them in push order
     concurrency:
@@ -106,7 +108,7 @@ jobs:
     # Only after tests pass AND the database is migrated, so new code never
     # runs against an old database schema
     needs: [migrate]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     concurrency:
       group: production
