@@ -1,11 +1,19 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  },
   "services": {
     "frontend": {
       "root": "frontend",
       "framework": "vite",
       "rewrites": [
-        { "source": "/(.*)", "destination": "/index.html" }
+        {
+          "source": "/(.*)",
+          "destination": "/index.html"
+        }
       ]
     },
     "backend": {
@@ -15,7 +23,17 @@
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": { "service": "backend" } },
-    { "source": "/(.*)", "destination": { "service": "frontend" } }
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "frontend"
+      }
+    }
   ]
 }
