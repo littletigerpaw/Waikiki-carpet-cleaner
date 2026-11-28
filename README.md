@@ -119,12 +119,26 @@ flask create-manager      # prompts for name, email, password
 unset DATABASE_URL        # back to your local SQLite database
 ```
 
-### 4. Automatic migrations (optional, recommended)
-GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**:
-`DATABASE_URL` = the same Neon connection string. From then on, every push to `main` that
-passes the tests also runs `flask db upgrade` on production.
+### 4. Automatic migrations
+Add the GitHub secret `DATABASE_URL` (see step 5). Every push to `main` that passes the tests
+then runs `flask db upgrade` on production before deploying.
 
-### 5. Check it
+### 5. Deploy pipeline (deploys only after tests pass)
+```
+push to main → backend + frontend tests → migrate Neon → vercel deploy --prod → health check
+```
+Add these GitHub Actions secrets (Settings → Secrets and variables → Actions):
+| Secret | Where to find it |
+|--------|------------------|
+| `DATABASE_URL` | Neon **unpooled** connection string |
+| `VERCEL_TOKEN` | vercel.com/account/settings/tokens (scope: your team; renew before it expires) |
+| `VERCEL_ORG_ID` | Vercel → Team Settings → General → Team ID (`team_…`) |
+| `VERCEL_PROJECT_ID` | Vercel → Project → Settings → General → Project ID (`prj_…`) |
+
+`vercel.json` turns off Vercel's own Git deploys for `main`, so GitHub Actions is the only
+way code reaches production. To deploy by hand in an emergency: `npx vercel@68.0.0 deploy --prod`.
+
+### 6. Check it
 - `https://<your-app>.vercel.app/api/health` → `{"status": "ok"}`
 - Log in as your manager, add an employee, log in as them on a phone, take a photo.
 
